@@ -4,6 +4,7 @@ Forked from https://github.com/aaronhurt/zfs-replicate
 
 # Features
 - supports PUSH or PULL replication
+- runs off a well documented `config.sh` file (see below)
 - can be run on any schedule using cron with `bash zfs-replicate.sh -config.sh`
 
 Warning
