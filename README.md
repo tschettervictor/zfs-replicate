@@ -2,11 +2,9 @@
 Bash script to automate ZFS Replication
 Forked from https://github.com/aaronhurt/zfs-replicate
 
-
-zfs-replicate.sh
-================
-
-Simple script to replicate zfs datasets between hosts (or between pools on the same host) via incremental snapshots.
+# Features
+- supports PUSH or PULL replication
+- can be run on any schedule using cron with `bash zfs-replicate.sh -config.sh`
 
 Warning
 -------
