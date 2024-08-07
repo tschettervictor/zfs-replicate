@@ -134,7 +134,7 @@ do_push() {
         local pushargs="-R -I ${1}"
     fi
     printf "Sending snapshots...\n"
-    printf "RUNNING: %s %s %s | %s %s\n" "${SEND_PIPE}" "${sendargs}" "${2}" "${RECEIVE_PIPE}" "${3}"
+    printf "RUNNING: %s %s %s | %s %s\n" "${SEND_PIPE}" "${pushargs}" "${2}" "${RECEIVE_PIPE}" "${3}"
     if ! ${SEND_PIPE} ${pushargs} ${2} | ${RECEIVE_PIPE} ${3}; then
         exit_error
     fi
