@@ -55,7 +55,19 @@ exit_clean() {
     ## check log files
     check_old_log
     ## always exit 0
-    printf "Exiting...\n"
+    printf "SUCCESS\n"
+    exit 0
+}
+
+exit_error() {
+    ## print errors
+    if [ "${1}x" != "x" ] && [ ${1} != 0 ]; then
+        printf "Last operation returned error code: %s\n" "${1}"
+    fi
+    ## check log files
+    check_old_log
+    ## always exit 0
+    printf "FAILED\n"
     exit 0
 }
 
@@ -79,7 +91,7 @@ check_lock () {
         ## tell em what to do...
         printf "To run script please delete: %s\n" "${1}"
         ## compress log and exit...
-        exit_clean
+        exit_error
     else
         ## well no lockfile..let's make a new one
         printf "Creating lockfile: %s\n" "${1}"
@@ -105,7 +117,7 @@ check_remote() {
         ## exit if above returned non-zero
         if [ $? != 0 ]; then
             printf "ERROR: Remote health check '%s' failed!\n" "${REMOTE_CHECK}"
-            exit_clean
+            exit_error
         fi
     fi
 }
@@ -123,7 +135,9 @@ do_push() {
     fi
     printf "Sending snapshots...\n"
     printf "RUNNING: %s %s %s | %s %s\n" "${SEND_PIPE}" "${sendargs}" "${2}" "${RECEIVE_PIPE}" "${3}"
-    ${SEND_PIPE} ${pushargs} ${2} | ${RECEIVE_PIPE} ${3}
+    if ! ${SEND_PIPE} ${pushargs} ${2} | ${RECEIVE_PIPE} ${3}; then
+        exit_error
+    fi
     ## get status
     local push_status=$?
     ## clear lockfile
@@ -145,7 +159,9 @@ do_pull() {
     fi
     printf "Sending snapshots...\n"
     printf "RUNNING: %s %s %s | %s %s\n" "${SEND_PIPE}" "${pullargs}" "${2}" "${RECEIVE_PIPE}" "${3}"
-    ${SEND_PIPE} ${pullargs} ${2} | ${RECEIVE_PIPE} ${3};
+    if ! ${SEND_PIPE} ${pullargs} ${2} | ${RECEIVE_PIPE} ${3}; then
+        exit_error
+    fi
     ## get status
     local pull_status=$?
     ## clear lockfile
@@ -219,20 +235,20 @@ do_snap() {
         declare -a snaps=()
         ## to the loop...
         for sn in $temps; do
-            ## while we are here...check for our current snap name
-            if [ "${sn}" == "${local_set}@${sname}" ]; then
-                ## looks like it's here...we better kill it
-                ## this shouldn't happen normally
-                printf "Destroying DUPLICATE snapshot %s@%s\n" "${local_set}" "${sname}"                
-                if [ ${MODE} == PUSH ]; then
+            ## Check current snapshot name and destroy duplicates (if they exist)
+            if [ ${MODE} == PUSH ]; then
+                if [ "${sn}" == "${local_set}@${sname}" ]; then
+                    printf "Destroying DUPLICATE snapshot %s@%s\n" "${local_set}" "${sname}"                
                     do_destroy ${local_set}@${sname}
-                elif [ ${MODE} == PULL ]; then
+                fi
+            elif [ ${MODE} == PULL ]; then
+                if [ "${sn}" == "${remote_set}@${sname}" ]; then
+                    printf "Destroying DUPLICATE snapshot %s@%s\n" "${remote_set}" "${sname}"                
                     do_destroy ${remote_set}@${sname}
                 fi
             else
-                ## append this snap to an array
+                ## append this snap to an array and increase count
                 snaps[$index]=$sn
-                ## increase our index counter
                 let "index += 1"
             fi
         done
@@ -255,10 +271,10 @@ do_snap() {
                 let "scount -= 1"; let "index += 1"
             done
         fi
-        ## come on already...make that snapshot
-        printf "Creating ZFS snapshot %s@%s\n" "${local_set}" "${sname}"
-        ## check if we are supposed to be recurrsive
+        
+        ## Create snapshot and check for recursive setting
         if [ ${MODE} = PUSH ]; then
+            printf "Creating ZFS snapshot %s@%s\n" "${local_set}" "${sname}"
             if [ $RECURSE_CHILDREN -ne 1 ]; then
                 printf "RUNNING: %s snapshot %s@%s\n" "${ZFS}" "${local_set}" "${sname}"
                 $ZFS snapshot ${local_set}@${sname}
@@ -267,6 +283,7 @@ do_snap() {
                 $ZFS snapshot -r ${local_set}@${sname}
             fi
         elif [ ${MODE} = PULL ]; then
+            printf "Creating ZFS snapshot %s@%s\n" "${remote_set}" "${sname}"
             if [ $RECURSE_CHILDREN -ne 1 ]; then
                 printf "RUNNING: %s snapshot %s@%s\n" "${ZFS}" "${remote_set}" "${sname}"
                 ssh $REMOTE_SERVER $ZFS snapshot ${remote_set}@${sname}
@@ -278,10 +295,9 @@ do_snap() {
         ## check return
         if [ $? -ne 0 ]; then
             ## oops...that's not right
-            exit_clean $?
+            exit_error $?
         fi
-        ## send incremental if snap count 1 or more
-        ## otherwise send a regular stream
+        ## Send incremental snaphot if count is 1 or more, otherwise send full snapshot
         if [ ${MODE} == PUSH ]; then    
             if [ $scount -ge 1 ]; then
                 do_push ${base_snap} ${local_set}@${sname} ${remote_set}
@@ -301,10 +317,12 @@ do_snap() {
                 printf "ERROR: Failed to send snapshot %s@$%s\n" "${local_set}" "${sname}"
                 printf "Deleting the local snapshot %s@$%s\n" "${local_set}" "${sname}"
                 do_destroy ${local_set}@${sname}
+                exit_error
             elif [ ${MODE} = PULL ]; then
                 printf "ERROR: Failed to send snapshot %s@$%s\n" "${remote_set}" "${sname}"
                 printf "Deleting the local snapshot %s@$%s\n" "${remote_set}" "${sname}"
                 do_destroy ${remote_set}@${sname}
+                exit_error
             fi
         fi
     done
@@ -327,7 +345,7 @@ init() {
     printf "Creating snapshots...\n"
     do_snap
     ## that's it...sending called from do_snap
-    printf "Finished all operations for ...\n"
+    printf "Finished all operations for...\n"
     ## show a nice message and exit...
     exit_clean
 }
