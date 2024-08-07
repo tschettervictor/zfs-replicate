@@ -246,11 +246,10 @@ do_snap() {
                     printf "Destroying DUPLICATE snapshot %s@%s\n" "${remote_set}" "${sname}"                
                     do_destroy ${remote_set}@${sname}
                 fi
-            else
+            fi
                 ## append this snap to an array and increase count
                 snaps[$index]=$sn
                 let "index += 1"
-            fi
         done
         ## set our snap count and reset our index
         local scount=${#snaps[@]}; local index=0
