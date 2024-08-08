@@ -133,8 +133,8 @@ do_push() {
     check_lock "${LOGBASE}/.push.lock"
     ## create initial push command based on arguments
     ## if first snapname is NULL we do not generate an inremental
-    local dest_snap="$(ssh ${REMOTE_SERVER} $ZFS list -t snapshot -o name | grep ${remote_set} | grep autorep- | awk -F'@' '{print $2}' | tail -n 1)"
-    local source_snap="$($ZFS list -t snapshot -o name | grep ${dest_snap} | awk -F'@' '{print $2}' | tail -n 1)"
+    local dest_snap="$(ssh ${REMOTE_SERVER} $ZFS list -t snapshot -o name | grep ${remote_set} 2>/dev/null | grep autorep- 2>/dev/null | awk -F'@' '{print $2}' | tail -n 1)"
+    local source_snap="$($ZFS list -t snapshot -o name | grep ${dest_snap} 2>/dev/null | awk -F'@' '{print $2}' | tail -n 1)"
     local common_snap="${local_set}@${dest_snap}"
     if [ "${1}" == "NULL" ]; then
         local pushargs="-R"
@@ -166,8 +166,8 @@ do_pull() {
     check_lock "${LOGBASE}/.pull.lock"
     ## create initial receive command based on arguments
     ## if first snapname is NULL we do not generate an inremental
-    local dest_snap="$($ZFS list -t snapshot -o name | grep ${local_set} | grep autorep- | awk -F'@' '{print $2}' | tail -n 1)"
-    local source_snap="$(ssh ${REMOTE_SERVER} $ZFS list -t snapshot -o name | grep ${dest_snap} | awk -F'@' '{print $2}' | tail -n 1)"
+    local dest_snap="$($ZFS list -t snapshot -o name | grep ${local_set} 2>/dev/null | grep autorep- 2>/dev/null | awk -F'@' '{print $2}' | tail -n 1)"
+    local source_snap="$(ssh ${REMOTE_SERVER} $ZFS list -t snapshot -o name | grep ${dest_snap} 2>/dev/null | awk -F'@' '{print $2}' | tail -n 1)"
     local common_snap="${remote_set}@${dest_snap}"
     if [ "${1}" == "NULL" ]; then
         local pullargs="-R"
