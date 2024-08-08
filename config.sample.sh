@@ -46,8 +46,10 @@ SNAP_KEEP=2
 ## older logs will be deleted
 LOG_KEEP=5
 
-## log files directory
-LOGBASE=/root/logs
+## log files directory (defaults to script path)
+SCRIPT=$(readlink -f "$0")
+SCRIPTPATH=$(dirname "${SCRIPT}")
+LOGBASE="${SCRIPTPATH}/logs"
 
 ## command to check health of remote host
 ## a return code of 0 will be considered OK
