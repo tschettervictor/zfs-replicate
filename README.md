@@ -5,7 +5,7 @@ Forked from https://github.com/aaronhurt/zfs-replicate
 # Features
 - supports PUSH or PULL replication
 - supports multiple pool/dataset pairs to replicate
-- everything is logged to `/var/log/zfs-replicate` by default (can be set to custom location using $LOGBASE variable)
+- everything is logged to `${SCRIPTPATH}/logs` by default (can be set to custom location using $LOGBASE variable) but its better to keep it together with the scripts
 - runs off a well documented `config.sh` file (see below)
 - can be run on any schedule using cron with `bash zfs-replicate.sh -config.sh`
 - (for XigmaNAS) includes a `status-report.sh` that can be used to email latest replication status, which will email the latest replication status at your preferred schedule. Simply add it as a custom script in the email settings under "System > Advanced > Email Reports" 
@@ -79,8 +79,10 @@ SNAP_KEEP=2
 ## older logs will be deleted
 LOG_KEEP=5
 
-## log files directory
-LOGBASE=/root/logs
+## log files directory (defaults to script path)
+SCRIPT=$(readlink -f "$0")
+SCRIPTPATH=$(dirname "${SCRIPT}")
+LOGBASE="${SCRIPTPATH}/logs"
 
 ## command to check health of remote host
 ## a return code of 0 will be considered OK
