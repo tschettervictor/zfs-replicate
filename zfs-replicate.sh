@@ -133,16 +133,18 @@ do_push() {
     check_lock "${LOGBASE}/.push.lock"
     ## create initial push command based on arguments
     ## if first snapname is NULL we do not generate an inremental
-    local source_snap="$($ZFS list -t snapshot -o name | grep autorep- | awk -F'@' '{print $2}' | tail -n 2 | head -n 1)"
-    local dest_snap="$(ssh ${REMOTE_SERVER} $ZFS list -t snapshot -o name | grep autorep- | awk -F'@' '{print $2}' | tail -n 1)"
-    if [ "${1}" = "NULL" ]; then
+    local dest_snap="$(ssh ${REMOTE_SERVER} $ZFS list -t snapshot -o name | grep ${remote_set} | grep autorep- | awk -F'@' '{print $2}' | tail -n 1)"
+    local source_snap="$($ZFS list -t snapshot -o name | grep ${dest_snap} | awk -F'@' '{print $2}' | tail -n 1)"
+    local common_snap="${local_set}@${dest_snap}"
+    if [ "${1}" == "NULL" ]; then
         local pushargs="-R"
     elif [ "${dest_snap}" == "${source_snap}" ]; then
-        local pushargs="-R -I ${1}"
+        local pushargs="-R -I ${common_snap}"
     else
 	printf "Replication is set to do incrmental replication, but no commmon snapshots\n"
-	printf "have been found. Please delete all snapshots from the source and destination\n"
-	printf "and try running the script again. Be warned, this will reinitiate the replication\n"
+	printf "have been found. Please make sure the last snapshot with the autorep- name\n"
+	printf "matches on both sides, or delete all snapshots to initiate replication. Be\n"
+	printf "warned, this requires all the data to be re-sent to the destination.\n"
 	exit_error
     fi		
     printf "Sending snapshots...\n"
@@ -164,16 +166,18 @@ do_pull() {
     check_lock "${LOGBASE}/.pull.lock"
     ## create initial receive command based on arguments
     ## if first snapname is NULL we do not generate an inremental
-    local source_snap="$(ssh ${REMOTE_SERVER} $ZFS list -t snapshot -o name | grep autorep- | awk -F'@' '{print $2}' | tail -n 2 | head -n 1)"
-    local dest_snap="$($ZFS list -t snapshot -o name | grep autorep- | awk -F'@' '{print $2}' | tail -n 1)"
+    local dest_snap="$($ZFS list -t snapshot -o name | grep ${local_set} | grep autorep- | awk -F'@' '{print $2}' | tail -n 1)"
+    local source_snap="$(ssh ${REMOTE_SERVER} $ZFS list -t snapshot -o name | grep ${dest_snap} | awk -F'@' '{print $2}' | tail -n 1)"
+    local common_snap="${remote_set}@${dest_snap}"
     if [ "${1}" == "NULL" ]; then
         local pullargs="-R"
     elif [ "${dest_snap}" == "${source_snap}" ]; then
-	local pullargs="-R -I ${1}"
+	local pullargs="-R -I ${common_snap}"
     else
 	printf "Replication is set to do incrmental replication, but no commmon snapshots\n"
-	printf "have been found. Please delete all snapshots from the source and destination\n"
-	printf "and try running the script again. Be warned, this will reinitiate the replication\n"
+	printf "have been found. Please make sure the last snapshot with the autorep- name\n"
+	printf "matches on both sides, or delete all snapshots to initiate replication. Be\n"
+	printf "warned, this requires all the data to be re-sent to the destination.\n"
 	exit_error
     fi
     printf "Sending snapshots...\n"
