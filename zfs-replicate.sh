@@ -47,32 +47,37 @@ check_old_log() {
 }
 
 ## exit 0 and delete old log files
-exit_clean() {
+exit_clean () {
     ## print errors
     if [ "${1}x" != "x" ] && [ ${1} != 0 ]; then
         printf "Last operation returned error code: %s\n" "${1}"
     fi
     ## check log files
     check_old_log
+    clear_lock "${LOGBASE}"/.push.lock
+    clear_lock "${LOGBASE}"/.pull.lock
+    clear_lock "${LOGBASE}"/.snapshot.lock
     ## always exit 0
     printf "SUCCESS\n"
-    exit 0
+    exit 0 
 }
 
-exit_error() {
+exit_error () {
     ## print errors
     if [ "${1}x" != "x" ] && [ ${1} != 0 ]; then
         printf "Last operation returned error code: %s\n" "${1}"
     fi
     ## check log files
     check_old_log
-    ## always exit 0
+    clear_lock "${LOGBASE}"/.push.lock
+    clear_lock "${LOGBASE}"/.pull.lock
+    clear_lock "${LOGBASE}"/.snapshot.lock
     printf "FAILED\n"
     exit 0
 }
 
 ## lockfile creation and maintenance
-check_lock () {
+check_lock() {
     ## check our lockfile status
     if [ -f "${1}" ]; then
         ## get lockfile contents
@@ -128,11 +133,18 @@ do_push() {
     check_lock "${LOGBASE}/.push.lock"
     ## create initial push command based on arguments
     ## if first snapname is NULL we do not generate an inremental
-    if [ "${1}" == "NULL" ]; then
+    local source_snap="$($ZFS list -t snapshot -o name | grep autorep- | awk -F'@' '{print $2}' | tail -n 2 | head -n 1)"
+    local dest_snap="$(ssh ${REMOTE_SERVER} $ZFS list -t snapshot -o name | grep autorep- | awk -F'@' '{print $2}' | tail -n 1)"
+    if [ "${1}" = "NULL" ]; then
         local pushargs="-R"
-    else
+    elif [ "${dest_snap}" == "${source_snap}" ]; then
         local pushargs="-R -I ${1}"
-    fi
+    else
+	printf "Replication is set to do incrmental replication, but no commmon snapshots\n"
+	printf "have been found. Please delete all snapshots from the source and destination\n"
+	printf "and try running the script again. Be warned, this will reinitiate the replication\n"
+	exit_error
+    fi		
     printf "Sending snapshots...\n"
     printf "RUNNING: %s %s %s | %s %s\n" "${SEND_PIPE}" "${pushargs}" "${2}" "${RECEIVE_PIPE}" "${3}"
     if ! ${SEND_PIPE} ${pushargs} ${2} | ${RECEIVE_PIPE} ${3}; then
@@ -152,10 +164,17 @@ do_pull() {
     check_lock "${LOGBASE}/.pull.lock"
     ## create initial receive command based on arguments
     ## if first snapname is NULL we do not generate an inremental
+    local source_snap="$(ssh ${REMOTE_SERVER} $ZFS list -t snapshot -o name | grep autorep- | awk -F'@' '{print $2}' | tail -n 2 | head -n 1)"
+    local dest_snap="$($ZFS list -t snapshot -o name | grep autorep- | awk -F'@' '{print $2}' | tail -n 1)"
     if [ "${1}" == "NULL" ]; then
         local pullargs="-R"
+    elif [ "${dest_snap}" == "${source_snap}" ]; then
+	local pullargs="-R -I ${1}"
     else
-        local pullargs="-R -I ${1}"
+	printf "Replication is set to do incrmental replication, but no commmon snapshots\n"
+	printf "have been found. Please delete all snapshots from the source and destination\n"
+	printf "and try running the script again. Be warned, this will reinitiate the replication\n"
+	exit_error
     fi
     printf "Sending snapshots...\n"
     printf "RUNNING: %s %s %s | %s %s\n" "${SEND_PIPE}" "${pullargs}" "${2}" "${RECEIVE_PIPE}" "${3}"
@@ -299,15 +318,27 @@ do_snap() {
         ## Send incremental snaphot if count is 1 or more, otherwise send full snapshot
         if [ ${MODE} == PUSH ]; then    
             if [ $scount -ge 1 ]; then
-                do_push ${base_snap} ${local_set}@${sname} ${remote_set}
+                if ! do_push ${base_snap} ${local_set}@${sname} ${remote_set}; then
+		do_destroy ${local_set}@${sname}
+		exit_error
+		fi
             else
-                do_push "NULL" ${local_set}@${sname} ${remote_set}
+                if ! do_push "NULL" ${local_set}@${sname} ${remote_set}; then
+		do_destroy ${local_set}@${sname}
+		exit_error
+		fi
             fi
         elif [ ${MODE} == PULL ]; then
             if [ $scount -ge 1 ]; then
-                do_pull ${base_snap} ${remote_set}@${sname} ${local_set}
+		if ! do_pull ${base_snap} ${remote_set}@${sname} ${local_set}; then
+		do_destroy ${remote_set}@${sname}
+		exit_error
+		fi
             else
-                do_pull "NULL" ${remote_set}@${sname} ${local_set}
+                if ! do_pull "NULL" ${remote_set}@${sname} ${local_set}; then
+		do_destroy ${remote_set}@${sname}
+		exit_error
+		fi
             fi
         fi
         ## check return of replication
@@ -335,7 +366,7 @@ init() {
     if [ $SNAP_KEEP -lt 2 ]; then
         printf "ERROR: You must keep at least 2 snaps for incremental sending.\n"
         printf "Please check the setting of 'SNAP_KEEP' in the script.\n"
-        exit_clean
+        exit_error
     fi
     ## check remote health
     printf "Checking remote system...\n"
